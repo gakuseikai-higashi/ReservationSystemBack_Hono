@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { z } from "zod";
-import { authenticateUser, createAccessToken, verifyToken } from "../utils/auth";
+import { authenticateUser, createAccessToken, verifyToken } from "../utils/auth.js";
 
 const auth = new Hono();
 

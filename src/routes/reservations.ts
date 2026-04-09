@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { ReservationRoom, ReservationStatus } from "@prisma/client";
-import { prisma } from "../utils/prisma";
+import { prisma } from "../utils/prisma.js";
 const reservations = new Hono();
 
 // 管理者: 予約一覧取得（?date=YYYY-MM-DD）
