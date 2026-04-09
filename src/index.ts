@@ -7,7 +7,7 @@ import upload from "./routes/upload.js";
 
 const app = new Hono();
 
-console.log(process.env.FRONTEND_URL); // FRONTEND_URLの値をログに出力
+console.log("FRONTEND_URL", process.env.FRONTEND_URL); // FRONTEND_URLの値をログに出力
 
 app.use("*", cors({
   origin: process.env.FRONTEND_URL || "",
