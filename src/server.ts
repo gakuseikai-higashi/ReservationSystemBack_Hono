@@ -2,27 +2,16 @@ import "dotenv/config";
 import app from "./index.js";
 import { serve } from "@hono/node-server";
 import { promises as fs } from "fs";
-import { execSync } from "child_process";
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 // uploadsディレクトリ自動作成
 fs.mkdir("uploads", { recursive: true }).catch(() => {});
 
-// DBマイグレーション（本番環境のみ）
-if (process.env.NODE_ENV === "production") {
-  try {
-    console.log("Running prisma migrate deploy...");
-    execSync("npx prisma migrate deploy", { stdio: "inherit" });
-    console.log("Migration completed.");
-  } catch (e) {
-    console.error("Migration failed:", e);
-  }
-}
-
 serve({
   fetch: app.fetch,
   port,
 });
 
-console.log(`Hono server running at http://localhost:${port}`);
+const serverUrl = process.env.PUBLIC_URL || `http://localhost:${port}`;
+console.log(`Hono server running at ${serverUrl}`);
