@@ -1,30 +1,46 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { promises as fs } from "fs";
-import path from "path";
+import { supabase, BUCKET } from "../utils/supabase.js";
 
 const upload = new Hono();
 
 // POST /upload
+// ✏️ フロントエンドから multipart/form-data で送信
+// リクエストフィールド:
+//   images: アップロードするファイル（複数可）
+//   ✏️ フィールド名を変更する場合は formData.getAll("images") の "images" を変更してください
 upload.post("/", async (c: Context) => {
   const formData = await c.req.formData();
+  // ✏️ フロントエンド側のフィールド名と合わせてください
   const files = formData.getAll("images");
   if (!files.length) {
     return c.json({ error: "No files uploaded" }, 400);
   }
 
-  const savedPaths: string[] = [];
+  const uploadedUrls: string[] = [];
   for (const file of files) {
     if (!(file instanceof File)) continue;
     const buffer = Buffer.from(await file.arrayBuffer());
+    // ✏️ 保存先フォルダを変更したい場合は filename のパスを編集してください
+    // 現在: {タイムスタンプ}_{ファイル名} （バケットのルートに保存）
     const filename = `${Date.now()}_${file.name}`;
-    const savePath = path.join("uploads", filename);
-    await fs.mkdir("uploads", { recursive: true });
-    await fs.writeFile(savePath, buffer);
-    savedPaths.push(savePath);
+
+    const { error } = await supabase.storage
+      .from(BUCKET)
+      .upload(filename, buffer, {
+        contentType: file.type,
+        upsert: false,
+      });
+
+    if (error) {
+      return c.json({ error: `Upload failed: ${error.message}` }, 500);
+    }
+
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(filename);
+    uploadedUrls.push(data.publicUrl);
   }
 
-  return c.json({ uploaded: savedPaths });
+  return c.json({ uploaded: uploadedUrls });
 });
 
 export default upload;

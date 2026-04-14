@@ -23,10 +23,10 @@ auth.post("/login", async (c: Context) => {
   }
   const accessToken = await createAccessToken({ sub: user.username });
   return c.json({
-    access_token: accessToken,
-    token_type: "bearer",
-    expires_in: 60 * 60,
-    user_info: { username: user.username, role: user.role },
+    accessToken: accessToken,
+    tokenType: "bearer",
+    expiresIn: 60 * 60,
+    userInfo: { username: user.username, role: user.role },
   });
 });
 

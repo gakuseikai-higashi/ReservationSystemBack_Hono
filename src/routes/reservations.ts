@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { ReservationRoom, ReservationStatus } from "@prisma/client";
 import { prisma } from "../utils/prisma.js";
+import { supabase, BUCKET } from "../utils/supabase.js";
 const reservations = new Hono();
 
 // 管理者: 予約一覧取得（?date=YYYY-MM-DD）
@@ -12,6 +13,17 @@ reservations.get("/all", async (c: Context) => {
   const all = await prisma.reservation.findMany({
     where,
     orderBy: date ? { startTime: "asc" } : { id: "asc" },
+    select: {
+      id: true,
+      clubName: true,
+      reservatorName: true,
+      numPeople: true,
+      room: true,
+      reservationDate: true,
+      startTime: true,
+      endTime: true,
+      status: true,
+    },
   });
   return c.json(all);
 });
@@ -23,7 +35,26 @@ reservations.get("/detail/:id", async (c: Context) => {
   if (!reservation) {
     return c.json({ error: "Not found" }, 404);
   }
-  return c.json(reservation);
+
+  // Supabase StorageのID_{id}/フォルダからファイル一覧を取得
+  const { data: storageFiles, error: storageError } = await supabase.storage
+    .from(BUCKET)
+    .list(`ID_${id}`);
+
+  const returnImageUrls = storageFiles
+    ? storageFiles.map((file) => {
+        const { data } = supabase.storage
+          .from(BUCKET)
+          .getPublicUrl(`ID_${id}/${file.name}`);
+        return data.publicUrl;
+      })
+    : reservation.returnImageUrls;
+
+  if (storageError) {
+    console.error(`[Storage] ファイル一覧取得失敗: ${storageError.message}`);
+  }
+
+  return c.json({ ...reservation, returnImageUrls });
 });
 
 // 一般: 部屋ごとの予約一覧取得（?date=YYYY-MM-DD）
@@ -167,14 +198,73 @@ reservations.put("/detail/:id/reject", async (c: Context) => {
   return c.json({ message: "予約を却下しました", updated });
 });
 
-// 管理者: 予約返却
+// 管理者: 予約返却（画像アップロード + DB更新）
+// ✏️ フロントエンドから PUT /api/reservations/detail/:id/return に multipart/form-data で送信
+// リクエストフィールド:
+//   images          : 返却時の写真ファイル（複数可）
+//   damageDetails   : 損傷内容テキスト（任意）
+//   actualReturnTime: 実際の返却時刻 ISO文字列（省略時は現在時刻）
 reservations.put("/detail/:id/return", async (c: Context) => {
   const id = Number(c.req.param("id"));
-  // TODO: 画像アップロード・認可
+
+  const reservation = await prisma.reservation.findUnique({ where: { id } });
+  if (!reservation) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  if (reservation.status === ReservationStatus.CANCELLED || reservation.status === ReservationStatus.RETURNED) {
+    return c.json({ error: "この予約はすでに処理済みです" }, 400);
+  }
+
+  const formData = await c.req.formData();
+  const damageDetails = formData.get("damage_details")?.toString() || null;
+  const actualReturnTimeStr = formData.get("actualReturnTime")?.toString();
+  const actualReturnTime = actualReturnTimeStr ? new Date(actualReturnTimeStr) : new Date();
+  const files = formData.getAll("return_images");
+
+  // 画像をSupabase Storageにアップロード
+  const returnImageUrls: string[] = [];
+  console.log(`[DEBUG] アップロード開始: ${files.length}件, BUCKET=${BUCKET}`);
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (!(file instanceof File)) {
+      console.log(`[DEBUG] files[${i}] は File インスタンスではないためスキップ`);
+      continue;
+    }
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const ext = file.name.split(".").pop();
+    const index = String(i + 1).padStart(3, "0");
+    const filename = `ID_${reservation.id}/${index}.${ext}`;
+    console.log(`[DEBUG] アップロード試行: filename=${filename}, size=${buffer.length}bytes, type=${file.type}`);
+
+    const { error } = await supabase.storage
+      .from(BUCKET)
+      .upload(filename, buffer, {
+        contentType: file.type,
+        upsert: false,
+      });
+
+    if (error) {
+      console.error(`[DEBUG] アップロード失敗: filename=${filename}, error=${error.message}`);
+      return c.json({ error: `画像のアップロードに失敗しました: ${error.message}` }, 500);
+    }
+
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(filename);
+    console.log(`[DEBUG] アップロード成功: publicUrl=${data.publicUrl}`);
+    returnImageUrls.push(data.publicUrl);
+  }
+  console.log(`[DEBUG] 全アップロード完了: ${returnImageUrls.length}件`);
+
+  // DB更新
   const updated = await prisma.reservation.update({
-    where: { id },
-    data: { status: ReservationStatus.RETURNED },
+    where: { id: reservation.id },
+    data: {
+      status: ReservationStatus.RETURNED,
+      actualReturnTime,
+      returnImageUrls,
+      damageDetails,
+    },
   });
+
   return c.json({ message: "予約を返却しました", updated });
 });
 
