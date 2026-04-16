@@ -14,4 +14,3 @@ serve({
 });
 
 const serverUrl = process.env.PUBLIC_URL || `http://localhost:${port}`;
-console.log(`Hono server running at ${serverUrl}`);
