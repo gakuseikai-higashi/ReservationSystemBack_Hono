@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {Context} from "hono";
 import { cors } from "hono/cors";
+import { logger } from "hono/logger";
 import reservations from "./routes/reservations.js";
 import auth from "./routes/auth.js";
 import upload from "./routes/upload.js";
@@ -9,6 +10,10 @@ const app = new Hono();
 
 console.log("FRONTEND_URL", process.env.FRONTEND_URL); // FRONTEND_URLの値をログに出力
 
+app.use("*", async (c, next) => {
+  if (c.req.method !== "OPTIONS") await logger()(c, next);
+  else await next();
+});
 app.use("*", cors({
   origin: process.env.FRONTEND_URL || "",
   allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],

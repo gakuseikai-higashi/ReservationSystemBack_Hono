@@ -50,10 +50,6 @@ reservations.get("/detail/:id", async (c: Context) => {
       })
     : reservation.returnImageUrls;
 
-  if (storageError) {
-    console.error(`[Storage] ファイル一覧取得失敗: ${storageError.message}`);
-  }
-
   return c.json({ ...reservation, returnImageUrls });
 });
 
@@ -223,18 +219,15 @@ reservations.put("/detail/:id/return", async (c: Context) => {
 
   // 画像をSupabase Storageにアップロード
   const returnImageUrls: string[] = [];
-  console.log(`[DEBUG] アップロード開始: ${files.length}件, BUCKET=${BUCKET}`);
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     if (!(file instanceof File)) {
-      console.log(`[DEBUG] files[${i}] は File インスタンスではないためスキップ`);
       continue;
     }
     const buffer = Buffer.from(await file.arrayBuffer());
     const ext = file.name.split(".").pop();
     const index = String(i + 1).padStart(3, "0");
     const filename = `ID_${reservation.id}/${index}.${ext}`;
-    console.log(`[DEBUG] アップロード試行: filename=${filename}, size=${buffer.length}bytes, type=${file.type}`);
 
     const { error } = await supabase.storage
       .from(BUCKET)
@@ -244,15 +237,12 @@ reservations.put("/detail/:id/return", async (c: Context) => {
       });
 
     if (error) {
-      console.error(`[DEBUG] アップロード失敗: filename=${filename}, error=${error.message}`);
       return c.json({ error: `画像のアップロードに失敗しました: ${error.message}` }, 500);
     }
 
     const { data } = supabase.storage.from(BUCKET).getPublicUrl(filename);
-    console.log(`[DEBUG] アップロード成功: publicUrl=${data.publicUrl}`);
     returnImageUrls.push(data.publicUrl);
   }
-  console.log(`[DEBUG] 全アップロード完了: ${returnImageUrls.length}件`);
 
   // DB更新
   const updated = await prisma.reservation.update({
