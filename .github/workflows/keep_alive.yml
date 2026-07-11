@@ -14,17 +14,6 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Send a ping to Supabase
-        run: |
-          curl -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/keep_alive" \
-          -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-          -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-          -H "Content-Type: application/json"
-
-jobs:
-  ping:
-    runs-on: ubuntu-latest
-    steps:
       # リポジトリの履歴を更新するためにチェックアウトが必要
       - name: Checkout repository
         uses: actions/checkout@v4
